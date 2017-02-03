@@ -2,94 +2,146 @@
 <meta charset="utf-8">
 <style>
 
-.counties {
+.link {
   fill: none;
+  stroke: #666;
+  stroke-width: 1.5px;
 }
 
-.states {
-  fill: none;
-  stroke: #fff;
-  stroke-linejoin: round;
+#licensing {
+  fill: green;
+}
+
+.link.licensing {
+  stroke: green;
+}
+
+.link.resolved {
+  stroke-dasharray: 0,2 1;
+}
+
+circle {
+  fill: #ccc;
+  stroke: #333;
+  stroke-width: 1.5px;
+}
+
+text {
+  font: 10px sans-serif;
+  pointer-events: none;
+  text-shadow: 0 1px 0 #fff, 1px 0 0 #fff, 0 -1px 0 #fff, -1px 0 0 #fff;
 }
 
 </style>
-<svg width="960" height="600"></svg>
-<script src="https://d3js.org/d3.v4.min.js"></script>
-<script src="https://d3js.org/d3-scale-chromatic.v1.min.js"></script>
-<script src="https://d3js.org/topojson.v2.min.js"></script>
+<body>
+<script src="//d3js.org/d3.v3.min.js"></script>
 <script>
 
-var svg = d3.select("svg"),
-    width = +svg.attr("width"),
-    height = +svg.attr("height");
+// http://blog.thomsonreuters.com/index.php/mobile-patent-suits-graphic-of-the-day/
+var links = [
+  {source: "Microsoft", target: "Amazon", type: "licensing"},
+  {source: "Microsoft", target: "HTC", type: "licensing"},
+  {source: "Samsung", target: "Apple", type: "suit"},
+  {source: "Motorola", target: "Apple", type: "suit"},
+  {source: "Nokia", target: "Apple", type: "resolved"},
+  {source: "HTC", target: "Apple", type: "suit"},
+  {source: "Kodak", target: "Apple", type: "suit"},
+  {source: "Microsoft", target: "Barnes & Noble", type: "suit"},
+  {source: "Microsoft", target: "Foxconn", type: "suit"},
+  {source: "Oracle", target: "Google", type: "suit"},
+  {source: "Apple", target: "HTC", type: "suit"},
+  {source: "Microsoft", target: "Inventec", type: "suit"},
+  {source: "Samsung", target: "Kodak", type: "resolved"},
+  {source: "LG", target: "Kodak", type: "resolved"},
+  {source: "RIM", target: "Kodak", type: "suit"},
+  {source: "Sony", target: "LG", type: "suit"},
+  {source: "Kodak", target: "LG", type: "resolved"},
+  {source: "Apple", target: "Nokia", type: "resolved"},
+  {source: "Qualcomm", target: "Nokia", type: "resolved"},
+  {source: "Apple", target: "Motorola", type: "suit"},
+  {source: "Microsoft", target: "Motorola", type: "suit"},
+  {source: "Motorola", target: "Microsoft", type: "suit"},
+  {source: "Huawei", target: "ZTE", type: "suit"},
+  {source: "Ericsson", target: "ZTE", type: "suit"},
+  {source: "Kodak", target: "Samsung", type: "resolved"},
+  {source: "Apple", target: "Samsung", type: "suit"},
+  {source: "Kodak", target: "RIM", type: "suit"},
+  {source: "Nokia", target: "Qualcomm", type: "suit"}
+];
 
-var unemployment = d3.map();
+var nodes = {};
 
-var path = d3.geoPath();
+// Compute the distinct nodes from the links.
+links.forEach(function(link) {
+  link.source = nodes[link.source] || (nodes[link.source] = {name: link.source});
+  link.target = nodes[link.target] || (nodes[link.target] = {name: link.target});
+});
 
-var x = d3.scaleLinear()
-    .domain([1, 10])
-    .rangeRound([600, 860]);
+var width = 960,
+    height = 500;
 
-var color = d3.scaleThreshold()
-    .domain(d3.range(2, 10))
-    .range(d3.schemeBlues[9]);
+var force = d3.layout.force()
+    .nodes(d3.values(nodes))
+    .links(links)
+    .size([width, height])
+    .linkDistance(60)
+    .charge(-300)
+    .on("tick", tick)
+    .start();
 
-var g = svg.append("g")
-    .attr("class", "key")
-    .attr("transform", "translate(0,40)");
+var svg = d3.select("body").append("svg")
+    .attr("width", width)
+    .attr("height", height);
 
-g.selectAll("rect")
-  .data(color.range().map(function(d) {
-      d = color.invertExtent(d);
-      if (d[0] == null) d[0] = x.domain()[0];
-      if (d[1] == null) d[1] = x.domain()[1];
-      return d;
-    }))
-  .enter().append("rect")
-    .attr("height", 8)
-    .attr("x", function(d) { return x(d[0]); })
-    .attr("width", function(d) { return x(d[1]) - x(d[0]); })
-    .attr("fill", function(d) { return color(d[0]); });
+// Per-type markers, as they don't inherit styles.
+svg.append("defs").selectAll("marker")
+    .data(["suit", "licensing", "resolved"])
+  .enter().append("marker")
+    .attr("id", function(d) { return d; })
+    .attr("viewBox", "0 -5 10 10")
+    .attr("refX", 15)
+    .attr("refY", -1.5)
+    .attr("markerWidth", 6)
+    .attr("markerHeight", 6)
+    .attr("orient", "auto")
+  .append("path")
+    .attr("d", "M0,-5L10,0L0,5");
 
-g.append("text")
-    .attr("class", "caption")
-    .attr("x", x.range()[0])
-    .attr("y", -6)
-    .attr("fill", "#000")
-    .attr("text-anchor", "start")
-    .attr("font-weight", "bold")
-    .text("Unemployment rate");
+var path = svg.append("g").selectAll("path")
+    .data(force.links())
+  .enter().append("path")
+    .attr("class", function(d) { return "link " + d.type; })
+    .attr("marker-end", function(d) { return "url(#" + d.type + ")"; });
 
-g.call(d3.axisBottom(x)
-    .tickSize(13)
-    .tickFormat(function(x, i) { return i ? x : x + "%"; })
-    .tickValues(color.domain()))
-  .select(".domain")
-    .remove();
+var circle = svg.append("g").selectAll("circle")
+    .data(force.nodes())
+  .enter().append("circle")
+    .attr("r", 6)
+    .call(force.drag);
 
-d3.queue()
-    .defer(d3.json, "https://d3js.org/us-10m.v1.json")
-    .defer(d3.tsv, "unemployment.tsv", function(d) { unemployment.set(d.id, +d.rate); })
-    .await(ready);
+var text = svg.append("g").selectAll("text")
+    .data(force.nodes())
+  .enter().append("text")
+    .attr("x", 8)
+    .attr("y", ".31em")
+    .text(function(d) { return d.name; });
 
-function ready(error, us) {
-  if (error) throw error;
+// Use elliptical arc path segments to doubly-encode directionality.
+function tick() {
+  path.attr("d", linkArc);
+  circle.attr("transform", transform);
+  text.attr("transform", transform);
+}
 
-  svg.append("g")
-      .attr("class", "counties")
-    .selectAll("path")
-    .data(topojson.feature(us, us.objects.counties).features)
-    .enter().append("path")
-      .attr("fill", function(d) { return color(d.rate = unemployment.get(d.id)); })
-      .attr("d", path)
-    .append("title")
-      .text(function(d) { return d.rate + "%"; });
+function linkArc(d) {
+  var dx = d.target.x - d.source.x,
+      dy = d.target.y - d.source.y,
+      dr = Math.sqrt(dx * dx + dy * dy);
+  return "M" + d.source.x + "," + d.source.y + "A" + dr + "," + dr + " 0 0,1 " + d.target.x + "," + d.target.y;
+}
 
-  svg.append("path")
-      .datum(topojson.mesh(us, us.objects.states, function(a, b) { return a !== b; }))
-      .attr("class", "states")
-      .attr("d", path);
+function transform(d) {
+  return "translate(" + d.x + "," + d.y + ")";
 }
 
 </script>
