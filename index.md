@@ -1,37 +1,95 @@
-## Welcome to GitHub Pages
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style>
 
-You can use the [editor on GitHub](https://github.com/harshshriv/d3examples/edit/master/index.md) to maintain and preview the content for your website in Markdown files.
+.counties {
+  fill: none;
+}
 
-Whenever you commit to this repository, GitHub Pages will run [Jekyll](https://jekyllrb.com/) to rebuild the pages in your site, from the content in your Markdown files.
+.states {
+  fill: none;
+  stroke: #fff;
+  stroke-linejoin: round;
+}
 
-### Markdown
+</style>
+<svg width="960" height="600"></svg>
+<script src="https://d3js.org/d3.v4.min.js"></script>
+<script src="https://d3js.org/d3-scale-chromatic.v1.min.js"></script>
+<script src="https://d3js.org/topojson.v2.min.js"></script>
+<script>
 
-Markdown is a lightweight and easy-to-use syntax for styling your writing. It includes conventions for
+var svg = d3.select("svg"),
+    width = +svg.attr("width"),
+    height = +svg.attr("height");
 
-```markdown
-Syntax highlighted code block
+var unemployment = d3.map();
 
-# Header 1
-## Header 2
-### Header 3
+var path = d3.geoPath();
 
-- Bulleted
-- List
+var x = d3.scaleLinear()
+    .domain([1, 10])
+    .rangeRound([600, 860]);
 
-1. Numbered
-2. List
+var color = d3.scaleThreshold()
+    .domain(d3.range(2, 10))
+    .range(d3.schemeBlues[9]);
 
-**Bold** and _Italic_ and `Code` text
+var g = svg.append("g")
+    .attr("class", "key")
+    .attr("transform", "translate(0,40)");
 
-[Link](url) and ![Image](src)
-```
+g.selectAll("rect")
+  .data(color.range().map(function(d) {
+      d = color.invertExtent(d);
+      if (d[0] == null) d[0] = x.domain()[0];
+      if (d[1] == null) d[1] = x.domain()[1];
+      return d;
+    }))
+  .enter().append("rect")
+    .attr("height", 8)
+    .attr("x", function(d) { return x(d[0]); })
+    .attr("width", function(d) { return x(d[1]) - x(d[0]); })
+    .attr("fill", function(d) { return color(d[0]); });
 
-For more details see [GitHub Flavored Markdown](https://guides.github.com/features/mastering-markdown/).
+g.append("text")
+    .attr("class", "caption")
+    .attr("x", x.range()[0])
+    .attr("y", -6)
+    .attr("fill", "#000")
+    .attr("text-anchor", "start")
+    .attr("font-weight", "bold")
+    .text("Unemployment rate");
 
-### Jekyll Themes
+g.call(d3.axisBottom(x)
+    .tickSize(13)
+    .tickFormat(function(x, i) { return i ? x : x + "%"; })
+    .tickValues(color.domain()))
+  .select(".domain")
+    .remove();
 
-Your Pages site will use the layout and styles from the Jekyll theme you have selected in your [repository settings](https://github.com/harshshriv/d3examples/settings). The name of this theme is saved in the Jekyll `_config.yml` configuration file.
+d3.queue()
+    .defer(d3.json, "https://d3js.org/us-10m.v1.json")
+    .defer(d3.tsv, "unemployment.tsv", function(d) { unemployment.set(d.id, +d.rate); })
+    .await(ready);
 
-### Support or Contact
+function ready(error, us) {
+  if (error) throw error;
 
-Having trouble with Pages? Check out our [documentation](https://help.github.com/categories/github-pages-basics/) or [contact support](https://github.com/contact) and we’ll help you sort it out.
+  svg.append("g")
+      .attr("class", "counties")
+    .selectAll("path")
+    .data(topojson.feature(us, us.objects.counties).features)
+    .enter().append("path")
+      .attr("fill", function(d) { return color(d.rate = unemployment.get(d.id)); })
+      .attr("d", path)
+    .append("title")
+      .text(function(d) { return d.rate + "%"; });
+
+  svg.append("path")
+      .datum(topojson.mesh(us, us.objects.states, function(a, b) { return a !== b; }))
+      .attr("class", "states")
+      .attr("d", path);
+}
+
+</script>
